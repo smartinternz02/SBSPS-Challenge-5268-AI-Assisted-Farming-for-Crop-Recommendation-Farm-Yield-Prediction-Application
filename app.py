@@ -1,30 +1,31 @@
 
 from flask import Flask, render_template, request
-app = Flask(__name__)
+import requests
+import json
 import pickle
 import random
 import pandas as pd
-#model = pickle.load(open('risk.pkl','rb'))
 
+app = Flask(__name__)
 
-import requests
+try:
+    model = pickle.load(open('risk.pkl','rb'))
+    # NOTE: you must manually set API_KEY below using information retrieved from your IBM Cloud account.
+    API_KEY = "Ls5s3x3bTi6ep25E2mudO-C2o4xPCOb5M_sJSIYOABzQ"
+    token_response = requests.post('https://iam.eu-gb.bluemix.net/identity/token', data={"apikey": API_KEY, "grant_type": 'urn:ibm:params:oauth:grant-type:apikey'})
+    mltoken = token_response.json()["access_token"]
+    print("mltoken",mltoken)
 
-import json
-# NOTE: you must manually set API_KEY below using information retrieved from your IBM Cloud account.
-API_KEY = "Ls5s3x3bTi6ep25E2mudO-C2o4xPCOb5M_sJSIYOABzQ"
-token_response = requests.post('https://iam.eu-gb.bluemix.net/identity/token', data={"apikey": API_KEY, "grant_type": 'urn:ibm:params:oauth:grant-type:apikey'})
-mltoken = token_response.json()["access_token"]
-print("mltoken",mltoken)
+    header = {'Content-Type': 'application/json', 'Authorization': 'Bearer ' + mltoken}
 
-header = {'Content-Type': 'application/json', 'Authorization': 'Bearer ' + mltoken}
+    # NOTE: manually define and pass the array(s) of values to be scored in the next line
+    #payload_scoring = {"input_data": [{"fields": [array_of_input_fields], "values": [array_of_values_to_be_scored, another_array_of_values_to_be_scored]}]}
+    model = pickle.load(open('yield_gujrat.pkl','rb'))
+    ohe=pickle.load(open('ohe.pkl','rb'))
+    sc=pickle.load(open('scaler.pkl','rb'))
 
-# NOTE: manually define and pass the array(s) of values to be scored in the next line
-#payload_scoring = {"input_data": [{"fields": [array_of_input_fields], "values": [array_of_values_to_be_scored, another_array_of_values_to_be_scored]}]}
-
-
-model = pickle.load(open('yield_gujrat.pkl','rb'))
-ohe=pickle.load(open('ohe.pkl','rb'))
-sc=pickle.load(open('scaler.pkl','rb'))
+except Exception as e:
+    print(e)
 
 
 @app.route('/')
@@ -66,19 +67,22 @@ def iot1():
                           f="Ph = {}".format(f),g="Rainfall = {}".format(g),labels=labels,values=values)
     
     #return render_template("circle.html",labels=labels,values=values)
-@app.route('/crop',methods=['POST'])
+@app.route('/crop',methods=['GET', 'POST'])
 def crop():
-    payload_scoring = {"input_data": [{"fields":["N","P","K","temperature","humidity","ph","rainfall"],"values":t}]}
-    response_scoring = requests.post('https://eu-gb.ml.cloud.ibm.com/ml/v4/deployments/49a70f4f-d984-4014-8345-da8ec8e2f69d/predictions?version=2021-09-01', json=payload_scoring, headers={'Authorization': 'Bearer ' + mltoken})
-    print("Scoring response")
-    predictions = response_scoring.json()
-    print(predictions)
-    pred = predictions['predictions'][0]['values'][0][0]
-    print(pred)
-    index=['apple', 'banana', 'blackgram', 'chickpea', 'coconut', 'coffee', 'cotton', 'grapes', 'jute', 'kidneybeans', 'lentil', 'maize', 'mango', 'mothbeans', 'mungbean', 'muskmelon', 'orange', 'papaya', 'pigeonpeas', 'pomegranate', 'rice', 'watermelon']
-    pred=index[pred]
-    
-    return render_template("crop.html",pred=pred)
+    if request.method=='POST':
+        payload_scoring = {"input_data": [{"fields":["N","P","K","temperature","humidity","ph","rainfall"],"values":t}]}
+        response_scoring = requests.post('https://eu-gb.ml.cloud.ibm.com/ml/v4/deployments/49a70f4f-d984-4014-8345-da8ec8e2f69d/predictions?version=2021-09-01', json=payload_scoring, headers={'Authorization': 'Bearer ' + mltoken})
+        print("Scoring response")
+        predictions = response_scoring.json()
+        print(predictions)
+        pred = predictions['predictions'][0]['values'][0][0]
+        print(pred)
+        index=['apple', 'banana', 'blackgram', 'chickpea', 'coconut', 'coffee', 'cotton', 'grapes', 'jute', 'kidneybeans', 'lentil', 'maize', 'mango', 'mothbeans', 'mungbean', 'muskmelon', 'orange', 'papaya', 'pigeonpeas', 'pomegranate', 'rice', 'watermelon']
+        pred=index[pred]
+        
+        return render_template("crop.html",pred=pred)
+    else:
+        return render_template('crop.html')
 
 @app.route('/risk', methods = ['POST'])
 def yield2():
